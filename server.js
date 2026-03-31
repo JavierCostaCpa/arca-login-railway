@@ -27,8 +27,10 @@ app.post("/api/login-arca", async (req, res) => {
   const { cuit, claveFiscal } = req.body || {};
   const logs = [];
 
+  console.log("👉 Iniciando proceso de login...");
+
   if (!cuit || !claveFiscal) {
-    return res.status(400).json({
+    return res.json({
       success: false,
       message: "Faltan datos requeridos.",
       logs: ["Error: faltan CUIT o Clave Fiscal"]
@@ -41,7 +43,12 @@ app.post("/api/login-arca", async (req, res) => {
     logs.push("Abriendo navegador...");
     browser = await chromium.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"]
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu"
+      ]
     });
 
     const context = await browser.newContext();
@@ -62,19 +69,22 @@ app.post("/api/login-arca", async (req, res) => {
     logs.push("Enviando formulario...");
     await page.click('button[type="submit"], input[type="submit"]');
 
+    logs.push("Esperando respuesta...");
     await page.waitForTimeout(5000);
 
     const contenido = await page.content();
     const urlActual = page.url();
 
+    logs.push(`URL actual: ${urlActual}`);
+
     const loginExitoso =
       contenido.includes("Mis Servicios") ||
       contenido.includes("Administrador de Relaciones") ||
-      contenido.includes("Clave Fiscal") ||
       urlActual.includes("contribuyente");
 
     if (loginExitoso) {
-      logs.push("Login exitoso en ARCA.");
+      logs.push("✅ Login exitoso en ARCA.");
+
       return res.json({
         success: true,
         message: "Login exitoso en ARCA",
@@ -82,19 +92,24 @@ app.post("/api/login-arca", async (req, res) => {
       });
     }
 
-    logs.push("No se pudo confirmar el login.");
-    return res.status(401).json({
+    logs.push("❌ No se pudo confirmar el login.");
+    logs.push("Posible cambio en la página de AFIP o credenciales incorrectas.");
+
+    return res.json({
       success: false,
       message: "No se pudo confirmar el login en ARCA",
       logs
     });
+
   } catch (error) {
-    logs.push(`Error técnico: ${error.message}`);
-    return res.status(500).json({
+    logs.push(`💥 Error técnico: ${error.message}`);
+
+    return res.json({
       success: false,
       message: "Error al intentar login en ARCA",
       logs
     });
+
   } finally {
     if (browser) {
       await browser.close();
@@ -103,5 +118,5 @@ app.post("/api/login-arca", async (req, res) => {
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
 });
